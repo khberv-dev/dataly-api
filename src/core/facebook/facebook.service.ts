@@ -30,7 +30,7 @@ export interface ActionValue {
   value: string;
 }
 
-interface FbInsightData {
+export interface FbInsightData {
   impressions: string;
   clicks: string;
   spend: string;
@@ -49,9 +49,22 @@ interface FbInsightData {
 export interface FbCampaign {
   id: string;
   name: string;
-  insights?: {
-    data: FbInsightData[];
-  };
+  insights?: { data: FbInsightData[] };
+}
+
+export interface FbAdSet {
+  id: string;
+  name: string;
+  campaign_id: string;
+  insights?: { data: FbInsightData[] };
+}
+
+export interface FbAd {
+  id: string;
+  name: string;
+  adset_id: string;
+  campaign_id: string;
+  insights?: { data: FbInsightData[] };
 }
 
 interface FbListResponse<T> {
@@ -93,14 +106,41 @@ export class FacebookService {
   }
 
   async getCampaigns(accountId: string, accessToken: string): Promise<FbCampaign[]> {
-    const fields = `id,name,${INSIGHT_FIELDS}`;
-    const all: FbCampaign[] = [];
+    return this.paginate<FbCampaign>(`${BASE_URL}/${accountId}/campaigns`, `id,name,${INSIGHT_FIELDS}`, accessToken);
+  }
+
+  async getAdSets(accountId: string, accessToken: string): Promise<FbAdSet[]> {
+    return this.paginate<FbAdSet>(
+      `${BASE_URL}/${accountId}/adsets`,
+      `id,name,campaign_id,${INSIGHT_FIELDS}`,
+      accessToken,
+    );
+  }
+
+  async getAds(accountId: string, accessToken: string): Promise<FbAd[]> {
+    return this.paginate<FbAd>(
+      `${BASE_URL}/${accountId}/ads`,
+      `id,name,adset_id,campaign_id,${INSIGHT_FIELDS}`,
+      accessToken,
+    );
+  }
+
+  async getAdsByAdSet(adsetId: string, accessToken: string): Promise<FbAd[]> {
+    return this.paginate<FbAd>(
+      `${BASE_URL}/${adsetId}/ads`,
+      `id,name,adset_id,campaign_id,${INSIGHT_FIELDS}`,
+      accessToken,
+    );
+  }
+
+  private async paginate<T>(url: string, fields: string, accessToken: string): Promise<T[]> {
+    const all: T[] = [];
     let after: string | undefined;
 
     try {
       do {
         const { data } = await firstValueFrom(
-          this.httpService.get<FbListResponse<FbCampaign>>(`${BASE_URL}/${accountId}/campaigns`, {
+          this.httpService.get<FbListResponse<T>>(url, {
             params: { fields, access_token: accessToken, ...(after ? { after } : {}) },
           }),
         );

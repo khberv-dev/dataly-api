@@ -39,8 +39,8 @@ export class AmoCrmService {
     return { domain: raw.substring(0, idx), accessToken: raw.substring(idx + 1) };
   }
 
-  extractUtmCampaign(deal: AmoDeal): string | null {
-    const field = deal.custom_fields_values?.find((f) => f.field_code === 'UTM_CAMPAIGN');
+  extractUtmField(deal: AmoDeal, fieldCode: string): string | null {
+    const field = deal.custom_fields_values?.find((f) => f.field_code === fieldCode);
     return field?.values?.[0]?.value ?? null;
   }
 

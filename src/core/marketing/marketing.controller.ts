@@ -14,4 +14,19 @@ export class MarketingController {
   getCampaigns(@Param('accountId') accountId: string) {
     return this.marketingService.getCampaigns(accountId);
   }
+
+  @Get('accounts/:accountId/adsets')
+  getAdSets(@Param('accountId') accountId: string) {
+    return this.marketingService.getAdSets(accountId);
+  }
+
+  @Get('accounts/:accountId/ads')
+  getAds(@Param('accountId') accountId: string) {
+    return this.marketingService.getAds(accountId);
+  }
+
+  @Get('accounts/:accountId/adsets/:adsetId/ads')
+  getAdsByAdSet(@Param('adsetId') adsetId: string) {
+    return this.marketingService.getAdsByAdSet(adsetId);
+  }
 }

@@ -40,4 +40,8 @@ export class UserService {
     if (!user) throw new NotFoundException('User not found');
     return user;
   }
+
+  async hasAnyUsers(): Promise<boolean> {
+    return (await this.userRepository.count()) > 0;
+  }
 }

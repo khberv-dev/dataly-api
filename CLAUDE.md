@@ -43,6 +43,9 @@ npm run migration:revert
 | `JWT_SECRET` | `change-me` | JWT signing secret |
 | `JWT_EXPIRES_IN` | `7d` | JWT TTL |
 | `PORT` | `3000` | HTTP port |
+| `AMO_UTM_CAMPAIGN` | `UTM_CAMPAIGN` | amoCRM custom field code for campaign matching |
+| `AMO_UTM_ADSET` | `UTM_CONTENT` | amoCRM custom field code for ad set matching |
+| `AMO_UTM_AD` | `UTM_SOURCE` | amoCRM custom field code for ad matching |
 
 ## Architecture
 
@@ -85,14 +88,25 @@ The amoCRM key stored in the DB is `<subdomain>:<accessToken>` (colon-separated)
 
 ### Marketing aggregation flow
 
+Marketing routes all follow the same pattern: fetch FB data + amoCRM closed deals in parallel, group deals by UTM field, filter for closed-in-30d, then compute metrics.
+
 - `GET /marketing/accounts` — lists Facebook ad accounts for the stored Meta key.
-- `GET /marketing/accounts/:accountId/campaigns` — fetches Facebook campaigns (last 30 days insights), fetches amoCRM closed deals (status 142, last 30 days), and maps deals to campaigns by:
-  1. `utm_campaign` custom field value (matches FB campaign id)
-  2. Fallback: parses a FB lead id from the deal name (`№<id>`) and calls Graph API (`v20.0`) to resolve its campaign
+- `GET /marketing/accounts/:accountId/campaigns` — fetches FB campaigns with insights, fetches amoCRM closed deals, and maps deals to campaigns via:
+  1. `utm_campaign` custom field value (matches FB campaign id), falling back to
+  2. Parsing a FB lead id from the deal name (`№<id>`) and calling Graph API (`v20.0`) to resolve its campaign id. This fallback uses `Promise.allSettled` — individual failures are silently skipped.
+- `GET /marketing/accounts/:accountId/adsets` — same pattern but groups leads by `UTM_CONTENT` field matching the ad set id; no FB lead-id fallback.
+- `GET /marketing/accounts/:accountId/ads` — same pattern but groups leads by `UTM_SOURCE` field matching the ad id; no FB lead-id fallback.
+- `GET /marketing/accounts/:accountId/adsets/:adsetId/ads` — same as above but fetches only ads belonging to the given adset (calls `/{adsetId}/ads` on the Graph API instead of `/{accountId}/ads`).
 
-The response includes both raw FB metrics (`spendUsd`, `reach`, `views`, `clicks`, `cpm`, `frequency`, video watch metrics) and derived metrics (`spendUzs` = USD × 12 000 used for ROAS internally, `roas`, `cpl`, `cac`, `hookRate`, `holdRate`, `linkCtr`, `visitRate`, `leadRate`, `leadsCount`, `overallLeadsCount`).
+`filterClosed30d` is applied after grouping: it keeps only deals with `status_id === 142` closed within the last 30 days. The `overallLeadsCount` in each response reflects all matched deals (before this filter); `leadsCount` reflects only the filtered set used for ROAS/CAC.
 
-amoCRM pagination caps at 100 pages × 250 items per page. FB lead-to-campaign resolution is done with `Promise.allSettled` — individual failures are silently skipped.
+amoCRM pagination caps at 100 pages × 250 items per page.
+
+### Metrics computed per campaign/adset/ad
+
+Raw FB metrics: `spendUsd`, `reach`, `views` (impressions), `clicks`, `cpm`, `frequency`, `linkClicks`, `linkCtr`, video watch metrics (`videoThruplay`, `video25/50/75/100`, `avgVideoTime`).
+
+Derived metrics: `spendUzs` = USD × 12 000, `roas` = saleAmount / spendUzs, `cpl` = spendUsd / overallLeadsCount, `cac` = spendUsd / leadsCount (closed deals in 30d), `saleAmount` = sum of deal prices.
 
 ### Database
 
