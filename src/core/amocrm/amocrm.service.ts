@@ -48,12 +48,10 @@ export class AmoCrmService {
     return this.paginate(domain, accessToken);
   }
 
-  getAllClosedDeals(domain: string, accessToken: string): Promise<AmoDeal[]> {
-    const now = Math.floor(Date.now() / 1000);
-    const from = now - 30 * 24 * 60 * 60;
+  getAllClosedDeals(domain: string, accessToken: string, from: number, to: number): Promise<AmoDeal[]> {
     return this.paginate(domain, accessToken, {
       'filter[closed_at][from]': String(from),
-      'filter[closed_at][to]': String(now),
+      'filter[closed_at][to]': String(to),
     });
   }
 

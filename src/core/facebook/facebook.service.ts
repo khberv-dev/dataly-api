@@ -4,7 +4,7 @@ import { firstValueFrom } from 'rxjs';
 
 const BASE_URL = 'https://graph.facebook.com/v25.0';
 
-const INSIGHT_FIELDS = `insights.date_preset(last_30d){${[
+const INSIGHT_FIELD_LIST = [
   'impressions',
   'clicks',
   'spend',
@@ -18,7 +18,11 @@ const INSIGHT_FIELDS = `insights.date_preset(last_30d){${[
   'video_p100_watched_actions',
   'video_avg_time_watched_actions',
   'outbound_clicks',
-].join(',')}}`;
+];
+
+function buildInsightFields(from: string, to: string): string {
+  return `insights.time_range({"since":"${from}","until":"${to}"}){${INSIGHT_FIELD_LIST.join(',')}}`;
+}
 
 export interface FbAdAccount {
   id: string;
@@ -105,30 +109,34 @@ export class FacebookService {
     }
   }
 
-  async getCampaigns(accountId: string, accessToken: string): Promise<FbCampaign[]> {
-    return this.paginate<FbCampaign>(`${BASE_URL}/${accountId}/campaigns`, `id,name,${INSIGHT_FIELDS}`, accessToken);
+  async getCampaigns(accountId: string, accessToken: string, from: string, to: string): Promise<FbCampaign[]> {
+    return this.paginate<FbCampaign>(
+      `${BASE_URL}/${accountId}/campaigns`,
+      `id,name,${buildInsightFields(from, to)}`,
+      accessToken,
+    );
   }
 
-  async getAdSets(accountId: string, accessToken: string): Promise<FbAdSet[]> {
+  async getAdSets(accountId: string, accessToken: string, from: string, to: string): Promise<FbAdSet[]> {
     return this.paginate<FbAdSet>(
       `${BASE_URL}/${accountId}/adsets`,
-      `id,name,campaign_id,${INSIGHT_FIELDS}`,
+      `id,name,campaign_id,${buildInsightFields(from, to)}`,
       accessToken,
     );
   }
 
-  async getAds(accountId: string, accessToken: string): Promise<FbAd[]> {
+  async getAds(accountId: string, accessToken: string, from: string, to: string): Promise<FbAd[]> {
     return this.paginate<FbAd>(
       `${BASE_URL}/${accountId}/ads`,
-      `id,name,adset_id,campaign_id,${INSIGHT_FIELDS}`,
+      `id,name,adset_id,campaign_id,${buildInsightFields(from, to)}`,
       accessToken,
     );
   }
 
-  async getAdsByAdSet(adsetId: string, accessToken: string): Promise<FbAd[]> {
+  async getAdsByAdSet(adsetId: string, accessToken: string, from: string, to: string): Promise<FbAd[]> {
     return this.paginate<FbAd>(
       `${BASE_URL}/${adsetId}/ads`,
-      `id,name,adset_id,campaign_id,${INSIGHT_FIELDS}`,
+      `id,name,adset_id,campaign_id,${buildInsightFields(from, to)}`,
       accessToken,
     );
   }

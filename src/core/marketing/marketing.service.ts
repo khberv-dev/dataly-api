@@ -13,6 +13,10 @@ function actVal(arr: Array<{ action_type: string; value: string }> | undefined, 
   return parseFloat(item?.value ?? '0');
 }
 
+function toDateString(d: Date): string {
+  return d.toISOString().split('T')[0];
+}
+
 @Injectable()
 export class MarketingService {
   private readonly logger = new Logger(MarketingService.name);
@@ -29,21 +33,22 @@ export class MarketingService {
     return this.facebookService.getAdAccounts(key);
   }
 
-  async getCampaigns(accountId: string) {
+  async getCampaigns(accountId: string, from?: string, to?: string) {
+    const range = this.resolveDateRange(from, to);
     const utmField = this.configService.get<string>('AMO_UTM_CAMPAIGN', 'UTM_CAMPAIGN');
     const metaKey = await this.requireKey(KeyType.META);
     const amoKey = await this.keysService.findByType(KeyType.AMOCRM);
 
     const [campaigns, closedLeads] = await Promise.all([
-      this.facebookService.getCampaigns(accountId, metaKey),
-      amoKey ? this.fetchClosedLeads(amoKey.key) : Promise.resolve<AmoDeal[]>([]),
+      this.facebookService.getCampaigns(accountId, metaKey, range.from, range.to),
+      amoKey ? this.fetchClosedLeads(amoKey.key, range.fromTs, range.toTs) : Promise.resolve<AmoDeal[]>([]),
     ]);
-    this.logger.log(`amoCRM closed leads (status=142, last 30d): ${closedLeads.length}`);
+    this.logger.log(`amoCRM closed leads (status=142): ${closedLeads.length}`);
 
     const { map: allLeadsMap, utmCount, fbCount } = await this.groupLeadsByCampaign(closedLeads, utmField, metaKey);
     this.logger.log(`Leads — overall: ${closedLeads.length}, via UTM: ${utmCount}, via Facebook lead ID: ${fbCount}`);
 
-    const leadsMap = this.filterClosed30d(allLeadsMap);
+    const leadsMap = this.filterByDateRange(allLeadsMap, range.fromTs, range.toTs);
 
     return campaigns.map((c) => ({
       id: c.id,
@@ -52,18 +57,19 @@ export class MarketingService {
     }));
   }
 
-  async getAdSets(accountId: string) {
+  async getAdSets(accountId: string, from?: string, to?: string) {
+    const range = this.resolveDateRange(from, to);
     const utmField = this.configService.get<string>('AMO_UTM_ADSET', 'UTM_CONTENT');
     const metaKey = await this.requireKey(KeyType.META);
     const amoKey = await this.keysService.findByType(KeyType.AMOCRM);
 
     const [adsets, closedLeads] = await Promise.all([
-      this.facebookService.getAdSets(accountId, metaKey),
-      amoKey ? this.fetchClosedLeads(amoKey.key) : Promise.resolve<AmoDeal[]>([]),
+      this.facebookService.getAdSets(accountId, metaKey, range.from, range.to),
+      amoKey ? this.fetchClosedLeads(amoKey.key, range.fromTs, range.toTs) : Promise.resolve<AmoDeal[]>([]),
     ]);
 
     const allLeadsMap = this.groupLeadsByUtm(closedLeads, utmField);
-    const leadsMap = this.filterClosed30d(allLeadsMap);
+    const leadsMap = this.filterByDateRange(allLeadsMap, range.fromTs, range.toTs);
 
     return adsets.map((a) => ({
       id: a.id,
@@ -73,18 +79,19 @@ export class MarketingService {
     }));
   }
 
-  async getAds(accountId: string) {
+  async getAds(accountId: string, from?: string, to?: string) {
+    const range = this.resolveDateRange(from, to);
     const utmField = this.configService.get<string>('AMO_UTM_AD', 'UTM_SOURCE');
     const metaKey = await this.requireKey(KeyType.META);
     const amoKey = await this.keysService.findByType(KeyType.AMOCRM);
 
     const [ads, closedLeads] = await Promise.all([
-      this.facebookService.getAds(accountId, metaKey),
-      amoKey ? this.fetchClosedLeads(amoKey.key) : Promise.resolve<AmoDeal[]>([]),
+      this.facebookService.getAds(accountId, metaKey, range.from, range.to),
+      amoKey ? this.fetchClosedLeads(amoKey.key, range.fromTs, range.toTs) : Promise.resolve<AmoDeal[]>([]),
     ]);
 
     const allLeadsMap = this.groupLeadsByUtm(closedLeads, utmField);
-    const leadsMap = this.filterClosed30d(allLeadsMap);
+    const leadsMap = this.filterByDateRange(allLeadsMap, range.fromTs, range.toTs);
 
     return ads.map((a) => ({
       id: a.id,
@@ -95,18 +102,19 @@ export class MarketingService {
     }));
   }
 
-  async getAdsByAdSet(adsetId: string) {
+  async getAdsByAdSet(adsetId: string, from?: string, to?: string) {
+    const range = this.resolveDateRange(from, to);
     const utmField = this.configService.get<string>('AMO_UTM_AD', 'UTM_SOURCE');
     const metaKey = await this.requireKey(KeyType.META);
     const amoKey = await this.keysService.findByType(KeyType.AMOCRM);
 
     const [ads, closedLeads] = await Promise.all([
-      this.facebookService.getAdsByAdSet(adsetId, metaKey),
-      amoKey ? this.fetchClosedLeads(amoKey.key) : Promise.resolve<AmoDeal[]>([]),
+      this.facebookService.getAdsByAdSet(adsetId, metaKey, range.from, range.to),
+      amoKey ? this.fetchClosedLeads(amoKey.key, range.fromTs, range.toTs) : Promise.resolve<AmoDeal[]>([]),
     ]);
 
     const allLeadsMap = this.groupLeadsByUtm(closedLeads, utmField);
-    const leadsMap = this.filterClosed30d(allLeadsMap);
+    const leadsMap = this.filterByDateRange(allLeadsMap, range.fromTs, range.toTs);
 
     return ads.map((a) => ({
       id: a.id,
@@ -115,6 +123,17 @@ export class MarketingService {
       campaignId: a.campaign_id,
       ...this.computeMetrics(a.insights?.data?.[0], leadsMap.get(a.id) ?? [], allLeadsMap.get(a.id)?.length ?? 0),
     }));
+  }
+
+  private resolveDateRange(from?: string, to?: string) {
+    const toDate = to ? new Date(to) : new Date();
+    const fromDate = from ? new Date(from) : new Date(toDate.getTime() - 30 * 24 * 60 * 60 * 1000);
+    return {
+      from: toDateString(fromDate),
+      to: toDateString(toDate),
+      fromTs: Math.floor(fromDate.getTime() / 1000),
+      toTs: Math.floor(toDate.getTime() / 1000),
+    };
   }
 
   private computeMetrics(insight: FbInsightData | undefined, leads: AmoDeal[], overallLeadsCount: number) {
@@ -165,20 +184,18 @@ export class MarketingService {
     };
   }
 
-  private filterClosed30d(map: Map<string, AmoDeal[]>): Map<string, AmoDeal[]> {
-    const now = Math.floor(Date.now() / 1000);
-    const from = now - 30 * 24 * 60 * 60;
+  private filterByDateRange(map: Map<string, AmoDeal[]>, fromTs: number, toTs: number): Map<string, AmoDeal[]> {
     return new Map(
       [...map.entries()].map(([id, leads]) => [
         id,
-        leads.filter((l) => l.status_id === 142 && l.closed_at >= from && l.closed_at <= now),
+        leads.filter((l) => l.status_id === 142 && l.closed_at >= fromTs && l.closed_at <= toTs),
       ]),
     );
   }
 
-  private async fetchClosedLeads(amoKeyRaw: string): Promise<AmoDeal[]> {
+  private async fetchClosedLeads(amoKeyRaw: string, fromTs: number, toTs: number): Promise<AmoDeal[]> {
     const { domain, accessToken } = this.amoCrmService.parseKey(amoKeyRaw);
-    return this.amoCrmService.getAllClosedDeals(domain, accessToken);
+    return this.amoCrmService.getAllClosedDeals(domain, accessToken, fromTs, toTs);
   }
 
   private groupLeadsByUtm(leads: AmoDeal[], utmFieldCode: string): Map<string, AmoDeal[]> {

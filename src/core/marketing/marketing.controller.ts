@@ -1,4 +1,4 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, Param, Query } from '@nestjs/common';
 import { MarketingService } from './marketing.service';
 
 @Controller('marketing')
@@ -11,22 +11,38 @@ export class MarketingController {
   }
 
   @Get('accounts/:accountId/campaigns')
-  getCampaigns(@Param('accountId') accountId: string) {
-    return this.marketingService.getCampaigns(accountId);
+  getCampaigns(
+    @Param('accountId') accountId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.marketingService.getCampaigns(accountId, from, to);
   }
 
   @Get('accounts/:accountId/adsets')
-  getAdSets(@Param('accountId') accountId: string) {
-    return this.marketingService.getAdSets(accountId);
+  getAdSets(
+    @Param('accountId') accountId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.marketingService.getAdSets(accountId, from, to);
   }
 
   @Get('accounts/:accountId/ads')
-  getAds(@Param('accountId') accountId: string) {
-    return this.marketingService.getAds(accountId);
+  getAds(
+    @Param('accountId') accountId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.marketingService.getAds(accountId, from, to);
   }
 
   @Get('accounts/:accountId/adsets/:adsetId/ads')
-  getAdsByAdSet(@Param('adsetId') adsetId: string) {
-    return this.marketingService.getAdsByAdSet(adsetId);
+  getAdsByAdSet(
+    @Param('adsetId') adsetId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.marketingService.getAdsByAdSet(adsetId, from, to);
   }
 }
